@@ -24,7 +24,7 @@ bool usb_send(gw_sync::MessageType type, uint16_t request_id,
     uint8_t frame[gw_sync::kMaxFrameBytes];
     const size_t n = gw_sync::build_frame(type, request_id, payload,
                                            payload_len, frame);
-    if (!Serial) return false;
+    if (!Serial.dtr()) return false;
     if (!n || Serial.availableForWrite() < static_cast<int>(n)) {
         ++g_usb_errors;
         return false;
@@ -219,7 +219,9 @@ void setup() {
 }
 
 void loop() {
-    const bool usb_connected = static_cast<bool>(Serial);
+    // STM32duino's USBSerial::operator bool() sleeps for 10 ms. Poll DTR
+    // directly so connection checks do not stall the 2.5 ms IMU schedule.
+    const bool usb_connected = Serial.dtr();
     if (g_was_usb_connected && !usb_connected) gw_fw::trigger_stop();
     g_was_usb_connected = usb_connected;
     poll_usb_rx();

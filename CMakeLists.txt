@@ -478,6 +478,8 @@ if(GW_BUILD_TESTS)
         tests/test_vio_config_builder.cpp
         tests/test_vio_config_repository.cpp
         tests/test_sync_controller_protocol.cpp
+        tests/test_bmi088_registers.cpp
+        tests/test_firmware_main.cpp
         tests/test_calibration_supervisor.cpp
         tests/test_apriltag_supervisor.cpp
         tests/test_attitude_filter.cpp
@@ -505,6 +507,8 @@ if(GW_BUILD_TESTS)
     # the STM32 firmware.
     target_include_directories(gw_tests PRIVATE ${OpenCV_INCLUDE_DIRS}
                                                 ${PROJECT_SOURCE_DIR})
+    set_source_files_properties(tests/test_firmware_main.cpp PROPERTIES
+        INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/tests/firmware_stubs;${PROJECT_SOURCE_DIR}/firmware/include")
     target_link_libraries(gw_tests PRIVATE ${OpenCV_LIBS} apriltag)
     target_compile_definitions(gw_tests PRIVATE
         GW_FIELD_LAYOUT_DEFAULT="${GW_FIELD_LAYOUT_DEFAULT}")

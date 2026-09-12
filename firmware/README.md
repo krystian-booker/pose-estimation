@@ -20,6 +20,7 @@ Key modules:
 
 - `include/sync_controller_protocol.h`: shared host/firmware USB contract;
 - `src/timebase.cpp`: TIM2 1 MHz 64-bit extended clock;
+- `src/system_clock.cpp`: board-specific 8 MHz crystal / 168 MHz system clock;
 - `src/trigger_engine.cpp`: interrupt-scheduled M1–M6 pulse groups;
 - `src/bmi088.cpp`: onboard SPI2 sensor initialization and 400 Hz reads;
 - `src/main.cpp`: USB command parser and multiplexed telemetry.
@@ -31,4 +32,3 @@ database intent after discovery/reconnect.
 
 See `docs/micoair-f405-v2.md` for pin mappings, power caveats, camera wiring,
 and physical acceptance tests.
-

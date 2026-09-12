@@ -83,6 +83,12 @@ the available pads but does not guarantee the USB-to-5V power path.
 The checked-in PlatformIO environment is pinned to the STM32 platform and
 builds one native USB CDC interface:
 
+`firmware/src/system_clock.cpp` overrides the generic F405 clock setup to
+use the board's 8 MHz crystal (168 MHz system clock, 48 MHz USB). Defining
+`HSE_VALUE` alone does not switch away from the generic variant's internal
+RC oscillator. The first-board test measured over 3,000 ppm of clock drift
+with that default, outside the host's 200 ppm synchronization limit.
+
 ```sh
 cd firmware
 pio run -e micoair_f405_v2

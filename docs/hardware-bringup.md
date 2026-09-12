@@ -1,6 +1,6 @@
 # GuessWork — Implementation Status & Hardware Bring-Up Plan
 
-*Last updated: 2026-08-29 (MicoAir F405 V2 replacement implemented; physical acceptance pending)*
+*Last updated: 2026-09-12 (MicoAir USB/IMU and clock-sync bench test passed; camera/output acceptance pending)*
 
 GuessWork is the onboard pose-estimation system for an FRC robot: a Mac Mini M4
 runs 6 hardware-synced FLIR Chameleon3 cameras (4 AprilTag + 2 stereo VIO), a
@@ -39,9 +39,9 @@ No raw host clocks are ever used for estimation math.
 | Piece | Status |
 |---|---|
 | TIM2 1 MHz wrap-extended 64-bit timebase shared by triggers and IMU | ✅ firmware builds; host parse unit-tested |
-| One bidirectional USB CDC stream with versioned frames, request IDs, lengths, and CRC16 | ✅ decoder golden-byte tested (CRC fail, fragmentation, resync) |
-| Onboard BMI088: 400 Hz scheduled SPI reads, board-frame rotation, heartbeat/drop counters | ✅ firmware builds; **first board validation pending** |
-| Host: `SyncProtocolDecoder`, `MeasurementBus<ImuSample>`, single-port `SyncControllerManager`, reconnect/config replay, `/api/imu/*` | ✅ unit and PTY integration tested |
+| One bidirectional USB CDC stream with versioned frames, request IDs, lengths, and CRC16 | ✅ decoder golden-byte tested; five-minute real USB run with zero CRC errors |
+| Onboard BMI088: 400 Hz scheduled SPI reads, board-frame rotation, heartbeat/drop counters | ✅ five-minute first-board stream at 400 Hz, zero drops; **axis orientation and camera timing acceptance pending** |
+| Host: `SyncProtocolDecoder`, `MeasurementBus<ImuSample>`, single-port `SyncControllerManager`, reconnect/config replay, `/api/imu/*` | ✅ unit/PTY tests and five-minute real manager + IMU bus test; clock sync healthy at ~22 ppm |
 
 ### Phase 2 — Calibration: multi-topic bags, camera-IMU extrinsics
 | Piece | Status |
@@ -166,6 +166,60 @@ Run the stages in order — each builds on the previous one. Start the server
 with `./build/guesswork` (default port 8080; substitute below).
 
 ### Stage 0 — Flash & smoke (≈ 30 min)
+
+**USB/IMU bench portion passed on 2026-09-12.** The corrected production
+firmware is installed on board USB serial `388638683335`. A five-minute run
+through the real `SyncControllerManager` and `MeasurementBus<ImuSample>`
+received 120,423 samples at 400 Hz in the device clock (host status ~401 Hz).
+Clock sync remained healthy at every one-second check after the ten-second
+warm-up allowance; final drift was 22 ppm, within the 200 ppm limit.
+There were zero firmware drops, USB errors, CRC errors, subscriber drops,
+nonfinite values, or nonmonotonic timestamps. Sample intervals were
+2458–2541 us. Mean acceleration magnitude was 9.813 m/s²; motion response
+was observed (peak gyro magnitude 12.006 rad/s), but individual axis
+directions have not been verified. Outputs stayed unarmed throughout.
+
+Local test evidence: `firmware/.pio/bringup/host-crystal.log`; the bench
+harness source is `firmware/.pio/bringup/host_smoke.cpp`. Flashed binary
+SHA-256: `ca047259331db106d0a2630af46ae3496bb6244074e33dd609959df0835d7411`.
+The HTTP/UI path was not part of this run. The 5V pad measurement, physical
+output checks, axis verification, camera integration, and 90-minute soak
+remain pending.
+
+**2026-09-12 first-board observations:** USB-only power and STM32 ROM DFU
+worked after reconnecting with BOOT held. The factory 1 MiB flash was backed
+up locally at `firmware/.pio/backups/micoair-388638683335-factory.bin` before
+flashing. The project firmware enumerated as one CDC port and answered
+`HELLO` and `STOP`; the initial 10-second check received valid heartbeats
+with no CRC errors, but `imu_ok` was false and no samples were produced.
+
+A temporary diagnostic build read the correct BMI088 IDs (`0x1E`, `0x0F`)
+and configured registers. Gyro bandwidth register `0x10` returned `0x83`;
+the original exact comparison with `0x03` incorrectly rejected it. The
+production fix preserves upper bits on write and validates the bandwidth
+field with Bosch's `0x0F` mask. Flashing that fix restored `imu_ok` and IMU
+samples, but the stream was only about 50 Hz with increasing scheduling
+drops. The pinned STM32duino `USBSerial::operator bool()` calls `delay(10)`;
+the firmware used it both in the main loop and for every transmitted frame.
+Both checks now read `Serial.dtr()` directly. A host test compiles the real
+firmware loop against a USB model with that 10 ms conversion delay and
+checks sampling and disconnect-stop behavior. All 17 relevant tests pass.
+
+After flashing both fixes, a 300-second direct USB run received 120,445 IMU
+samples: 401.483 Hz against the Mac clock, 400.000 Hz against device
+timestamps, zero nonmonotonic timestamps, zero CRC errors, and zero IMU,
+trigger, or USB drops. Timestamp intervals were 2458–2543 us; mean measured
+acceleration magnitude was 9.805 m/s². Outputs remained stopped.
+
+The real `SyncControllerManager` then connected and received healthy IMU
+data, but clock synchronization stayed unhealthy with over 3,000 ppm drift.
+The generic Arduino variant uses HSI (internal RC); `HSE_VALUE` alone does
+not select the board's crystal. `firmware/src/system_clock.cpp` now selects
+the 8 MHz HSE crystal for the 168 MHz system / 48 MHz USB clocks. Flashing
+this build resolved the clock-sync fault, as verified by the passing run
+above.
+
+Reference: [Bosch gyro register definitions](https://github.com/boschsensortec/BMI08x_SensorAPI/blob/master/bmi08_defs.h).
 
 1. With camera wiring disconnected, power by USB and measure the 5V pad;
    follow the fallback rule in `docs/micoair-f405-v2.md`.
